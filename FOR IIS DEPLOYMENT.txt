@@ -2976,3 +2976,498 @@ Then click **OK**.
 Your controller is not the first thing I'd change. A generic IIS `500` is an **environment/deployment error until proven otherwise**.
 
 **Do Step 2 and reproduce the error. Then open the generated `stdout_*.log` and paste its contents here.** That will let us diagnose the actual failure instead of guessing.
+
+
+
+
+
+
+
+
+
+
+
+ Microsoft.Data.SqlClient.SqlException (0x80131904): The EXECUTE permission was denied on the object 'sp_GetEmployee', database 'Dapper', schema 'dbo'.
+
+
+
+
+
+
+
+Now we have the **exact problem**. Your IIS and ASP.NET Core deployment are actually working. The failure is specifically a **SQL Server permission issue**.
+
+The most important line in your logs is:
+
+```text
+The EXECUTE permission was denied on the object 'sp_GetEmployee',
+database 'Dapper', schema 'dbo'.
+```
+
+And the first log shows the same problem for:
+
+```text
+sp_GetEmployeeById
+```
+
+## What is happening
+
+Your request flow is:
+
+```text
+Browser
+   ↓
+http://localhost:8080/api/Employee
+   ↓
+IIS
+   ↓
+Dapper_CRUD Application Pool
+   ↓
+ASP.NET Core application
+   ↓
+EmployeeController
+   ↓
+EmpService
+   ↓
+SQL Server
+   ↓
+Dapper database
+   ↓
+sp_GetEmployee   ← ❌ PERMISSION DENIED
+```
+
+So we can already confirm:
+
+### ✅ IIS is working
+
+Your log says:
+
+```text
+Application started.
+Hosting environment: Production
+Content root path: D:\IIS-Publish
+```
+
+That means your published application successfully started under IIS.
+
+### ✅ ASP.NET Core is working
+
+The request reached:
+
+```text
+EmployeeController.GetEmployees()
+```
+
+So routing and your controller are working.
+
+### ✅ Connection to SQL Server is working
+
+This is important.
+
+If the connection string itself were completely wrong, you'd get something like:
+
+```text
+Login failed
+Cannot open database
+A network-related error occurred
+```
+
+Instead, SQL Server is telling you:
+
+> I know who this user is, I know which database you're accessing, but this user doesn't have permission to execute this stored procedure.
+
+### ❌ SQL Server stored-procedure permissions are missing
+
+Your IIS application is using:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+to connect to SQL Server because your connection string uses:
+
+```text
+Trusted_Connection=True
+```
+
+Therefore SQL Server sees the application as:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+You created that login, which was correct.
+
+But **creating the login/user alone isn't enough**.
+
+That user needs permission to execute your stored procedures.
+
+---
+
+# The exact problem
+
+Your application calls:
+
+```text
+sp_GetEmployee
+```
+
+but SQL Server responds:
+
+```text
+Error Number: 229
+EXECUTE permission was denied
+```
+
+You also have:
+
+```text
+sp_GetEmployeeById
+```
+
+with the same problem.
+
+And because your CRUD application probably has other stored procedures, you will likely encounter the same error for:
+
+```text
+sp_AddEmployee
+sp_UpdateEmployee
+sp_DeleteEmployee
+```
+
+or whatever your actual procedure names are.
+
+---
+
+# The easiest solution for your practice project
+
+Since this is your **Employee Management/Dapper CRUD practice application**, you can give your database user permission to execute stored procedures.
+
+Open **SSMS**.
+
+Select:
+
+```text
+Dapper
+```
+
+and click:
+
+**New Query**
+
+Run:
+
+```sql
+USE Dapper;
+GO
+
+GRANT EXECUTE TO [Dapper_CRUD];
+GO
+```
+
+This grants the `Dapper_CRUD` database user permission to execute stored procedures in the database.
+
+### Then test
+
+Go to:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+You should now get your employee data instead of HTTP 500.
+
+---
+
+# But let's first verify the user
+
+Run this in SSMS:
+
+```sql
+USE Dapper;
+GO
+
+SELECT 
+    name,
+    type_desc
+FROM sys.database_principals
+WHERE name = 'Dapper_CRUD';
+```
+
+You should get something like:
+
+```text
+name          type_desc
+------------  ----------------
+Dapper_CRUD   WINDOWS_USER
+```
+
+That confirms your IIS application pool identity has a database user.
+
+---
+
+# Then check the permissions
+
+Run:
+
+```sql
+USE Dapper;
+GO
+
+SELECT 
+    dp.name AS UserName,
+    p.permission_name,
+    p.state_desc
+FROM sys.database_principals dp
+LEFT JOIN sys.database_permissions p
+    ON dp.principal_id = p.grantee_principal_id
+WHERE dp.name = 'Dapper_CRUD';
+```
+
+You may currently find that there is **no EXECUTE permission**.
+
+That's why your application fails.
+
+---
+
+# Recommended fix
+
+For your current development/practice deployment:
+
+```sql
+USE Dapper;
+GO
+
+GRANT EXECUTE TO [Dapper_CRUD];
+GO
+```
+
+This is better than giving the IIS account:
+
+```text
+db_owner
+```
+
+### Don't do this:
+
+```sql
+ALTER ROLE db_owner ADD MEMBER [Dapper_CRUD];
+```
+
+It would probably make the application work, but it gives the IIS application far more database privileges than it needs.
+
+For a real application, **least privilege** is the better approach.
+
+---
+
+# Why `db_datareader` and `db_datawriter` weren't enough
+
+This is an important concept for you as a .NET developer.
+
+You may have selected:
+
+```text
+☑ db_datareader
+☑ db_datawriter
+```
+
+Those roles basically allow things like:
+
+```sql
+SELECT
+INSERT
+UPDATE
+DELETE
+```
+
+on tables.
+
+But your application isn't directly doing:
+
+```sql
+SELECT * FROM Employee
+```
+
+Your Dapper code is doing something like:
+
+```csharp
+connection.QueryAsync<Employee>(
+    "sp_GetEmployee",
+    commandType: CommandType.StoredProcedure
+);
+```
+
+That means SQL Server requires:
+
+```text
+EXECUTE
+```
+
+permission on the stored procedure.
+
+So:
+
+```text
+db_datareader
+        +
+db_datawriter
+```
+
+does **not automatically mean**
+
+```text
+EXECUTE stored procedure
+```
+
+That's exactly what you're running into.
+
+---
+
+# Your second log confirms this
+
+Your second log says:
+
+```text
+The EXECUTE permission was denied on the object 'sp_GetEmployee'
+```
+
+and the stack trace shows:
+
+```text
+Dapper_CRUD.Service.EmpService.GetEmployees()
+```
+
+then:
+
+```text
+Dapper_CRUD.Controllers.EmployeeController.GetEmployees()
+```
+
+So your request:
+
+```text
+GET /api/Employee
+```
+
+is reaching this:
+
+```csharp
+[HttpGet]
+public async Task<IActionResult> GetEmployees()
+{
+    var data = await service.GetEmployees();
+    return Ok(data);
+}
+```
+
+Then:
+
+```text
+EmployeeController
+       ↓
+EmpService.GetEmployees()
+       ↓
+Dapper
+       ↓
+sp_GetEmployee
+       ↓
+❌ Permission denied
+```
+
+That's why the browser gets:
+
+```text
+HTTP ERROR 500
+```
+
+---
+
+# What about this warning?
+
+You also have:
+
+```text
+Failed to determine the https port for redirect.
+```
+
+Don't confuse this with the main error.
+
+It is a **separate warning**.
+
+Your actual fatal error is:
+
+```text
+Error Number: 229
+The EXECUTE permission was denied on the object 'sp_GetEmployee'
+```
+
+Fix the SQL permission first.
+
+---
+
+# Do this now
+
+### 1. Open SSMS
+
+### 2. Run:
+
+```sql
+USE Dapper;
+GO
+
+GRANT EXECUTE TO [Dapper_CRUD];
+GO
+```
+
+### 3. Recycle your IIS application pool
+
+```text
+IIS
+→ Application Pools
+→ Dapper_CRUD
+→ Right-click
+→ Recycle
+```
+
+### 4. Test:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+### 5. Then test:
+
+```text
+http://localhost:8080/api/Employee/1
+```
+
+The second one is important because your logs showed that `sp_GetEmployeeById` also lacks EXECUTE permission.
+
+---
+
+## One more thing
+
+After you grant:
+
+```sql
+GRANT EXECUTE TO [Dapper_CRUD];
+```
+
+**you don't need to republish your .NET application.**
+
+You don't need to change:
+
+* Controller ❌
+* Service ❌
+* Dapper code ❌
+* `appsettings.json` ❌
+* IIS website ❌
+* Application Pool ❌
+* Hosting Bundle ❌
+
+The application is already reaching SQL Server successfully.
+
+This is purely a **database authorization/permission issue**.
+
+Once `GRANT EXECUTE` is applied, your GET API should move past this error.
+
