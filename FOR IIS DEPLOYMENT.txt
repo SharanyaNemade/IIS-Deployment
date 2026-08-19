@@ -1,0 +1,935 @@
+#### **FOR IIS DEPLOYMENT**
+
+Steps from Downloading Hosting Bundle:-
+
+You should download the **ASP.NET Core Hosting Bundle from Microsoft's official .NET download page**.
+
+[Microsoft .NET 8 Download — Official](https://dotnet.microsoft.com/en-us/download/dotnet/8.0?utm_source=chatgpt.com)
+
+### Which one should you download?
+
+First check your Employee Management project's `.csproj` file:
+
+xml
+
+<TargetFramework>net8.0</TargetFramework>
+
+If it says **`net8.0`**, go to the .NET 8 download page and look under:
+
+**ASP.NET Core Runtime → Windows → Hosting Bundle**
+
+Microsoft specifically recommends the Hosting Bundle for Windows/IIS because it includes the runtime and IIS support. ([Microsoft][1])
+
+##### **Important**
+
+Don't download only:
+
+.NET Runtime
+
+or:
+
+ASP.NET Core Runtime
+
+**For IIS deployment, choose:**
+
+ASP.NET Core Runtime
+
+```
+   ↓ 
+```
+
+Windows
+
+```
+   ↓ 
+```
+
+Hosting Bundle
+
+The Hosting Bundle installs the **ASP.NET Core Module for IIS**, which allows IIS to host/forward requests to your ASP.NET Core application.
+
+#### **After installation**
+
+**Restart IIS**:
+
+cmd :- iisreset
+
+Then you can proceed with:
+
+Publish Backend
+
+```
+ ↓ 
+```
+
+Copy published files
+
+```
+ ↓ 
+```
+
+Create IIS Application Pool
+
+```
+ ↓ 
+```
+
+Create IIS Website
+
+```
+ ↓ 
+```
+
+Test API
+
+#####
+
+**After downloading IIS 8.0.30 how to restart IIS**
+
+---
+
+Yes. If you've installed the ASP.NET Core Hosting Bundle / IIS-related components, you can restart IIS.
+
+Easiest method — Command Prompt
+
+1. Open Command Prompt as Administrator
+
+2. Run: **iisreset**
+
+**You should see something like:**
+
+Attempting stop...
+
+Internet services successfully stopped.
+
+Attempting start...
+
+Internet services successfully started.
+
+That means IIS restarted successfully.
+
+Or restart from IIS Manager
+
+1. Press Win + R
+
+2. Type: `inetmgr`
+
+3. In the left panel, select your computer/server name
+
+4. On the right side under Actions, click Restart
+
+###### **Important clarification**
+
+If by "IIS 8.0.30" you mean IIS version 8.0.30, that's not the same thing as the ASP.NET Core Hosting Bundle.
+
+For your ASP.NET Core application, the important component is the ASP.NET Core Hosting Bundle for the .NET version your application targets.
+
+If you tell me your project's target framework, for example:
+
+`<TargetFramework>net8.0</TargetFramework>`
+
+###### **If your SQL Server and IIS are on the same Windows machine, then you may not need to change the connection string at all.**
+
+##### **In my appsettings.json i have this connection string:-**
+
+"ConnectionStrings": {
+
+"DbConn": "Server=localhost\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+
+}
+
+what changes need to do?
+
+If your SQL Server and IIS are on the same Windows machine, then you may not need to change the connection string at all.
+
+Your current connection string is:
+
+"ConnectionStrings": {
+
+"DbConn": "Server=localhost\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+
+}
+
+The important part is:
+
+Server=localhost\SQLEXPRESS
+
+When your application runs under IIS, localhost means the IIS server itself.
+
+
+
+
+
+
+
+##### **Scenario 1 — SQL Server is on the same machine as IIS**
+
+For example:
+
+Your PC
+
+│
+
+├── IIS
+
+│    └── Employee Management API
+
+│
+
+└── SQL Server Express
+
+```
+ └── Dapper database 
+```
+
+Then you can keep the connection string as it is:
+
+"ConnectionStrings": {
+
+"DbConn": "Server=localhost\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+
+}
+
+However, there is one important issue: Trusted_Connection=True uses Windows Authentication.
+
+Your application is no longer running directly as your Windows user.
+
+It will run under an IIS Application Pool identity.
+
+For Example:-
+
+Your Windows account
+
+```
+  ↓ 
+```
+
+Visual Studio
+
+```
+  ↓ 
+```
+
+SQL Server
+
+```
+  ↓ 
+```
+
+Works
+
+But under IIS:-
+
+IIS
+
+↓
+
+EmployeeManagementPool
+
+↓
+
+ASP.NET Core
+
+↓
+
+SQL Server
+
+SQL Server needs to allow that IIS identity to access the Dapper database.
+
+Recommended approach for your local IIS setup
+
+If SQL Server Express and IIS are on the same machine, you can configure SQL Server permissions for the IIS Application Pool identity.
+
+Suppose your Application Pool is:
+
+EmployeeManagementPool
+
+The Windows account you can grant access to is:
+
+IIS APPPOOL\EmployeeManagementPool
+
+In SQL Server Management Studio:
+
+Security
+
+↓
+
+Logins
+
+↓
+
+New Login
+
+Enter: `IIS APPPOOL\EmployeeManagementPool`
+
+Then map it to: Dapper
+
+and give it the database permissions your application requires.
+
+For example, if this is your development/test server and the application needs CRUD access, you would grant appropriate database roles/permissions rather than changing the application to use an administrator account.
+
+
+
+
+
+
+
+
+
+
+##### **Scenario 2 — SQL Server is on another computer**
+
+**Suppose your setup is:**
+
+Computer A
+
+↓
+
+IIS
+
+↓
+
+Employee API
+
+Computer B
+
+↓
+
+SQL Server Express
+
+↓
+
+Dapper database
+
+**Then this:**
+
+localhost\SQLEXPRESS is wrong.
+
+You need to use the SQL Server machine's name/IP and instance.
+
+For example:
+
+"ConnectionStrings": {
+
+"DbConn": "Server=192.168.1.100\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+
+}
+
+But Windows authentication across machines introduces additional configuration, so for a real server environment you would normally design the SQL authentication/service-account setup properly rather than simply putting credentials into appsettings.json.
+
+
+
+
+
+
+
+
+##### **Scenario 3 — IIS and SQL Server are on your own laptop**
+
+If you're doing this just to learn IIS deployment on your ASUS laptop, then your architecture is probably:
+
+Your Laptop
+
+│
+
+├── IIS
+
+│     └── Employee Management API
+
+│
+
+└── SQL Server Express
+
+```
+  └── Dapper 
+```
+
+In that case, don't change `localhost\\SQLEXPRESS` yet.
+
+Keep:
+
+"ConnectionStrings": {
+
+"DbConn": "Server=localhost\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+
+}
+
+The thing you need to configure is SQL Server access for the IIS Application Pool identity.
+
+One more important thing: test it before IIS
+
+Before deployment, verify that this database actually exists:
+
+SQL Server
+
+↓
+
+SQLEXPRESS
+
+↓
+
+Dapper
+
+In SSMS, run:
+
+USE Dapper;
+
+GO
+
+
+
+
+SELECT DB_NAME();
+
+You should get: Dapper
+
+
+
+Then make sure your tables/stored procedures are there.
+
+
+
+
+
+Your deployment architecture
+
+For your current Employee Management System, if everything is on the same PC, I'd use:
+
+
+
+
+
+┌─────────────────────────────────────┐
+│             YOUR PC                             │
+│                                                 │
+│  IIS                                            │
+│   │                                             │
+│   └── EmployeeManagement API                   │
+│             │                                   │
+│             │ Dapper                            │
+│             ↓                                   │
+│      SQL Server Express                         │
+│             │                                   │
+│             └── Dapper Database                │
+│                                                 │
+└─────────────────────────────────────┘
+
+
+
+
+
+
+
+
+where i can get security -> login -> new login in ssms tell in detail
+
+
+
+
+Yes. This is done inside SQL Server Management Studio (SSMS), not inside IIS.
+
+For your current setup, we'll assume:
+
+
+
+IIS
+ ↓
+EmployeeManagementPool
+ ↓
+ASP.NET Core API
+ ↓
+SQL Server Express
+ ↓
+Dapper database
+
+
+
+Your connection string uses:	Trusted_Connection=True
+
+so we need to give the IIS Application Pool identity permission to access the Dapper database.
+
+
+
+
+
+
+
+Step 1 — Open SSMS
+
+
+Open SQL Server Management Studio.
+
+
+You will get: Connect to Server
+
+Use the same SQL Server instance that your application currently uses.
+
+For your connection string:	Server=localhost\SQLEXPRESS
+
+In SSMS, enter:
+
+Server type:     Database Engine
+Server name:     localhost\SQLEXPRESS
+Authentication:  Windows Authentication
+
+Then click Connect.
+
+
+
+
+
+
+
+
+Step 2 — Find your SQL Server instance
+
+
+After connecting, look at the left side:
+
+
+Object Explorer
+│
+└── localhost\SQLEXPRESS
+
+
+Expand it:
+
+
+localhost\SQLEXPRESS
+│
+├── Databases
+├── Security
+├── Server Objects
+├── Replication
+└── Management
+
+
+You will see Security directly underneath your server.
+
+
+⚠️ Important: There are two different Security sections you may encounter.
+
+
+We want the server-level Security:
+
+
+localhost\SQLEXPRESS
+    ↓
+Security
+
+
+
+NOT:
+
+Databases
+    ↓
+Dapper
+    ↓
+Security
+
+For creating the login, use the first one.
+
+
+
+
+
+
+
+
+
+Step 3 — Expand Security
+
+
+
+Click the arrow next to: Security
+
+
+You should see:
+
+Security
+│
+├── Logins
+├── Server Roles
+├── Credentials
+└── Audits
+
+Click the arrow next to: Logins
+
+
+You will see existing SQL Server logins.
+
+
+For example:
+
+Logins
+│
+├── sa
+├── BUILTIN\Administrators
+├── NT AUTHORITY\SYSTEM
+└── ...
+
+
+
+
+
+
+
+
+Step 4 — Right-click Logins
+
+Right-click: Logins
+
+
+You should get a context menu containing:
+
+New Login...
+
+
+
+Click:
+
+New Login...
+
+
+
+A window called:
+
+Login - New
+
+will open.
+
+
+
+
+
+
+
+Step 5 — Enter the IIS Application Pool identity
+
+
+This is the important part.
+
+
+At the top you will see:
+
+Login name:
+
+
+
+Enter: IIS APPPOOL\EmployeeManagementPool
+
+
+assuming your IIS Application Pool is called: EmployeeManagementPool
+
+
+
+If you named your Application Pool something else, use that exact name.
+
+
+For example, if your pool is: EmployeeAPI-Pool
+
+
+then enter: IIS APPPOOL\EmployeeAPI-Pool
+
+
+
+
+
+
+Step 6 — Don't use SQL Server Authentication
+
+You will see two options:
+
+○ Windows authentication
+○ SQL Server authentication
+
+
+Select:
+
+Windows authentication
+
+Because your connection string says:	Trusted_Connection=True
+
+You do not need to create a username/password here.
+
+
+
+
+
+
+
+
+
+Step 7 — Go to User Mapping
+
+On the left side of the Login - New window, you'll see:
+
+General
+Server Roles
+User Mapping
+Securables
+Status
+
+Click:
+
+User Mapping
+
+You'll see a list of databases.
+
+Something like:
+
+Map
+Database
+
+
+☐ master
+☐ model
+☐ msdb
+☐ tempdb
+☐ Dapper
+
+Find:	Dapper
+
+and tick the checkbox:	☑ Dapper
+
+
+
+
+
+
+
+
+Step 8 — Give the login database permissions
+
+
+After selecting Dapper, look at the bottom section:
+
+Database role membership for: Dapper
+
+
+
+You'll see roles such as:
+
+☐ db_datareader
+☐ db_datawriter
+☐ db_ddladmin
+☐ db_owner
+☐ public
+
+
+For your local learning/development Employee Management System, you can initially select:
+
+☑ db_datareader
+☑ db_datawriter
+☑ public
+
+This gives your application:
+
+SELECT
+INSERT
+UPDATE
+DELETE
+
+access.
+
+
+
+Don't select db_owner unnecessarily
+
+You may see tutorials telling you to select:	☑ db_owner
+
+
+It will usually make the application work, but it gives extremely broad permissions.
+
+For a proper application, follow least privilege.
+
+For your current IIS learning setup, db_datareader + db_datawriter is a reasonable starting point.
+access.
+
+
+
+
+
+
+Step 9 — Click OK
+
+Click:	OK
+
+
+SSMS should create the login.
+
+Now go back to:
+
+
+localhost\SQLEXPRESS
+    ↓
+Security
+    ↓
+Logins
+
+
+You should see:
+
+IIS APPPOOL\EmployeeManagementPool
+
+
+
+
+
+
+Step 10 — Verify the database user
+
+
+Now expand:
+
+Databases
+    ↓
+Dapper
+    ↓
+Security
+    ↓
+Users
+
+You should find a user corresponding to your IIS application pool login.
+
+
+
+Conceptually:
+
+Dapper
+│
+└── Security
+      │
+      └── Users
+            │
+            └── IIS APPPOOL\EmployeeManagementPool
+
+
+
+That's the relationship we want:
+
+IIS Application Pool
+        ↓
+IIS APPPOOL\EmployeeManagementPool
+        ↓
+SQL Server Login
+        ↓
+Dapper Database User
+        ↓
+db_datareader / db_datawriter
+
+
+
+
+
+
+
+Step 11 — Check your IIS Application Pool name
+
+
+Before doing this, make sure the name is exactly correct.
+
+
+Open:
+
+IIS Manager
+    ↓
+Application Pools
+
+
+
+You might see:
+
+Name
+------------------------------
+.NET v4.5
+DefaultAppPool
+EmployeeManagementPool
+
+
+
+
+If your application pool is:
+
+EmployeeManagementPool
+
+
+then your SQL Server login must be:
+
+IIS APPPOOL\EmployeeManagementPool
+
+Spelling and spaces matter.
+
+
+
+
+
+
+
+
+
+Step 12 — Your connection string remains the same
+
+
+After doing this, you can continue using:
+
+{
+  "ConnectionStrings": {
+    "DbConn": "Server=localhost\\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+  }
+}
+
+You don't need to put:
+
+Username
+Password
+
+into the connection string.
+
+
+
+The authentication flow becomes:
+
+
+Employee API
+      ↓
+IIS Application Pool
+      ↓
+EmployeeManagementPool
+      ↓
+Windows Identity
+      ↓
+SQL Server
+      ↓
+Dapper Database
+
+
+
+One important check before you do this
+
+If you cannot find:
+
+IIS APPPOOL\EmployeeManagementPool
+
+
+
+in the New Login dialog, don't panic. This is a common point of confusion.
+
+
+You can click Search... next to Login name and then enter the application pool identity, or we can create it using a SQL command.
+
+In fact, for IIS application pool identities, I generally prefer using the exact identity:
+
+
+CREATE LOGIN [IIS APPPOOL\EmployeeManagementPool] FROM WINDOWS;
+
+and then map it to your Dapper database.
+
+If you want, I can walk you through 
+the exact SSMS GUI clicks from New Login → User Mapping → db_datareader/db_datawriter, including what every field on each screen means.
+
+
+
+
+
+
