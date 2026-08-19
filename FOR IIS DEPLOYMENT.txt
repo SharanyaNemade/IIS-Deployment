@@ -933,3 +933,2046 @@ the exact SSMS GUI clicks from New Login → User Mapping → db_datareader/db_d
 
 
 
+IN MS SQL :-
+
+
+You're exactly where you need to be. From your screenshot, you're connected to:
+
+
+localhost\SQLEXPRESS
+
+
+and you have already expanded:
+
+Security
+   ↓
+Logins
+
+
+
+
+Now do this:
+
+Right-click on `Logins`** — the folder itself, not `sa` or any existing login.
+
+In your screenshot, it is here:
+
+
+Security
+   └── Logins  ← RIGHT-CLICK THIS
+       ├── ##MS_PolicyEventProcessingLogin##
+       ├── ##MS_PolicyTsqlExecutionLogin##
+       ├── BUILTIN\Users
+       ├── LAPTOP-ED55U69O\Sharanya
+       ├── NT AUTHORITY\SYSTEM
+       ├── ...
+       └── sa
+
+
+Then select:
+
+New Login...
+
+You should get a window titled:
+
+
+Login - New
+
+
+Then stop there
+
+Don't change anything else yet.
+
+Send me a screenshot of the Login - New window after it opens, and I'll tell you exactly what to enter in each field.
+
+
+
+
+
+Here pool means my project ?
+
+
+
+No. The Application Pool is not your project. It is an IIS container/process configuration that runs your application.
+
+Think of it like this:
+
+
+Your Project
+EmployeeManagement
+       ↓
+Publish
+       ↓
+Published files
+       ↓
+IIS Website
+       ↓
+Application Pool
+       ↓
+ASP.NET Core application runs
+
+
+
+Example
+
+Suppose your project is called:
+
+
+EmployeeManagement
+
+
+In IIS, you might create:
+
+
+Site Name:
+EmployeeManagement
+
+
+and an Application Pool:
+
+
+EmployeeManagementPool
+
+
+These are **two different things**.
+
+| Item                                 | Meaning                                           |
+| ------------------------------------ | ------------------------------------------------- |
+| `EmployeeManagement`                 | Your website/application                          |
+| `EmployeeManagementPool`             | IIS process/environment that runs the application |
+| `C:\Websites\EmployeeManagement`     | Published application files                       |
+| `IIS APPPOOL\EmployeeManagementPool` | Windows identity used by that pool                |
+
+
+Why are we using the Pool name in SQL Server?
+
+Because your application doesn't run under your personal Windows account when IIS runs it.
+
+You currently have a SQL login:
+
+
+LAPTOP-ED55U69O\Sharanya
+
+
+That's your Windows account.
+
+When you run from Visual Studio, your application may connect to SQL Server using your Windows identity:
+
+
+Visual Studio
+    ↓
+LAPTOP-ED55U69O\Sharanya
+    ↓
+SQL Server
+
+
+But after IIS deployment:
+
+
+IIS
+ ↓
+EmployeeManagementPool
+ ↓
+IIS APPPOOL\EmployeeManagementPool
+ ↓
+SQL Server
+
+
+Therefore, we give that IIS identity permission to the `Dapper` database.
+
+What you should do now
+
+First, let's see what **your actual Application Pool is called**.
+
+Open:
+
+
+IIS Manager
+    ↓
+Application Pools
+
+
+Look for the pool you created for your Employee Management application.
+
+It may be:
+
+
+EmployeeManagementPool
+
+
+or:
+
+
+EmployeeAPI-Pool
+
+
+or perhaps you haven't created one yet.
+
+If you haven't created the Application Pool yet, don't create the SQL login yet. Create the IIS Application Pool first, then we'll use its exact name in SSMS.
+
+
+
+
+
+
+
+
+
+I haven't published it yet so what to do noww?
+
+
+
+
+Correct. **Stop at the SQL Server Login step for now.** Since you haven't published or created the IIS application yet, you don't have an Application Pool name to use.
+
+Let's do this in the correct order. Don't configure SQL Server permissions prematurely.
+
+## Your deployment sequence
+
+For your Employee Management backend:
+
+```text
+1. Verify application locally
+        ↓
+2. Publish ASP.NET Core backend
+        ↓
+3. Create IIS Application Pool
+        ↓
+4. Create IIS Website
+        ↓
+5. Configure folder permissions
+        ↓
+6. Configure SQL Server permission
+        ↓
+7. Test API through IIS
+```
+
+### Step 1 — First verify your project
+
+Before publishing, run your project from Visual Studio and make sure this works:
+
+```text
+GET /api/Employee
+POST /api/Employee
+PUT /api/Employee/{id}
+DELETE /api/Employee/{id}
+```
+
+Also make sure your current connection string works:
+
+```json
+"ConnectionStrings": {
+  "DbConn": "Server=localhost\\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+```
+
+If it works locally, move on.
+
+---
+
+# Step 2 — Publish your backend
+
+In Visual Studio:
+
+```text
+Solution Explorer
+    ↓
+Right-click your ASP.NET Core backend project
+    ↓
+Publish...
+```
+
+You should get the Publish screen.
+
+Select:
+
+```text
+Target
+   ↓
+Folder
+```
+
+Then choose a folder such as:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+Set:
+
+```text
+Configuration: Release
+```
+
+Then click:
+
+**Publish**
+
+You should eventually get something like:
+
+```text
+C:\Publish\EmployeeManagement
+│
+├── EmployeeManagement.dll
+├── EmployeeManagement.deps.json
+├── EmployeeManagement.runtimeconfig.json
+├── web.config
+├── appsettings.json
+├── appsettings.Development.json
+└── wwwroot
+```
+
+The exact files depend on your project.
+
+---
+
+# Step 3 — After publishing, create the IIS Application Pool
+
+Only **after publishing**, go to:
+
+```text
+IIS Manager
+    ↓
+Application Pools
+    ↓
+Add Application Pool...
+```
+
+Give it a clear name, for example:
+
+```text
+EmployeeManagementPool
+```
+
+Set:
+
+```text
+.NET CLR Version: No Managed Code
+Managed pipeline mode: Integrated
+```
+
+Click **OK**.
+
+Now you have an actual Application Pool.
+
+---
+
+# Step 4 — Then create the IIS Website
+
+Go to:
+
+```text
+IIS
+    ↓
+Sites
+    ↓
+Right-click
+    ↓
+Add Website...
+```
+
+For example:
+
+```text
+Site name:
+EmployeeManagement
+
+Physical path:
+C:\Publish\EmployeeManagement
+
+Application Pool:
+EmployeeManagementPool
+
+Type:
+http
+
+IP:
+All Unassigned
+
+Port:
+8080
+```
+
+Now your architecture becomes:
+
+```text
+EmployeeManagement Project
+          ↓
+       Publish
+          ↓
+C:\Publish\EmployeeManagement
+          ↓
+     IIS Website
+          ↓
+EmployeeManagementPool
+          ↓
+   ASP.NET Core API
+```
+
+---
+
+# Step 5 — Only NOW configure SQL Server
+
+Once the pool exists and you've named it:
+
+```text
+EmployeeManagementPool
+```
+
+then come back to SSMS:
+
+```text
+SQL Server
+ ↓
+Security
+ ↓
+Logins
+ ↓
+New Login
+```
+
+and create:
+
+```text
+IIS APPPOOL\EmployeeManagementPool
+```
+
+Then map it to:
+
+```text
+Dapper
+```
+
+with the appropriate database permissions.
+
+---
+
+## So what should you do right now?
+
+**Don't touch SSMS anymore for the moment.**
+
+Your immediate next task is:
+
+> **Publish your ASP.NET Core backend from Visual Studio.**
+
+Once the Publish window opens, **send me a screenshot of that Publish screen**. I'll tell you exactly what to select and what folder to use.
+
+
+
+
+
+
+
+If I give a customize folder will that be ok? By default is going inside :-bin\Release\net8.0\publish\
+as shown in the image
+
+
+
+
+
+Yes. **A custom folder is perfectly fine, and for IIS deployment I actually recommend it.**
+
+Your current default:
+
+```text
+bin\Release\net8.0\publish\
+```
+
+is valid, but it's inside your project directory.
+
+### I recommend using:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+So in the **Folder location** field shown in your screenshot, replace:
+
+```text
+bin\Release\net8.0\publish\
+```
+
+with:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+Then click **Finish**.
+
+### Why use `C:\Publish\EmployeeManagement`?
+
+It gives you a clean separation:
+
+```text
+Your Visual Studio Project
+C:\...\EmployeeManagement\
+        ↓
+        ↓ Publish
+        ↓
+C:\Publish\EmployeeManagement\
+        ↓
+        ↓ IIS points here
+        ↓
+IIS → EmployeeManagement Website
+```
+
+This is cleaner than having IIS point directly into:
+
+```text
+YourProject\bin\Release\net8.0\publish
+```
+
+It also makes future deployments easier:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+can be your dedicated deployment directory.
+
+### One important point
+
+You **do not need to create `C:\Publish\EmployeeManagement` manually first**. Visual Studio can create the folder during publishing if it doesn't exist.
+
+So, on your current screen:
+
+**Folder location:**
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+Then:
+
+**Finish → Publish**
+
+After that, we will check that the folder contains files such as:
+
+```text
+EmployeeManagement.dll
+web.config
+appsettings.json
+EmployeeManagement.deps.json
+EmployeeManagement.runtimeconfig.json
+```
+
+**Don't create the IIS website yet.** First complete the publish successfully. Then we'll create the Application Pool and IIS website in the correct order.
+
+
+
+
+
+Published now next step
+
+
+
+
+
+Good. Now that the backend is published, let's proceed in the correct order.
+
+## Step 1 — Verify the published folder
+
+Open:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+You should see files similar to:
+
+```text
+EmployeeManagement.dll
+EmployeeManagement.deps.json
+EmployeeManagement.runtimeconfig.json
+web.config
+appsettings.json
+```
+
+You may also have:
+
+```text
+wwwroot
+```
+
+If those are there, the publish is successful.
+
+---
+
+# Step 2 — Create the IIS Application Pool
+
+Open **IIS Manager**:
+
+```text
+Win + R
+```
+
+type:
+
+```text
+inetmgr
+```
+
+and press Enter.
+
+On the left:
+
+```text
+Your Computer
+    ↓
+Application Pools
+```
+
+Right-click **Application Pools** → **Add Application Pool...**
+
+Enter:
+
+### Name
+
+```text
+EmployeeManagementPool
+```
+
+### .NET CLR Version
+
+Select:
+
+```text
+No Managed Code
+```
+
+### Managed pipeline mode
+
+Keep:
+
+```text
+Integrated
+```
+
+### Start application pool immediately
+
+Keep it checked.
+
+Then click **OK**.
+
+You should now see:
+
+```text
+Application Pools
+└── EmployeeManagementPool
+```
+
+---
+
+# Step 3 — Create the IIS Website
+
+Now go to:
+
+```text
+IIS Manager
+    ↓
+Sites
+```
+
+Right-click **Sites** → **Add Website...**
+
+Use:
+
+| Setting          | Value                           |
+| ---------------- | ------------------------------- |
+| Site name        | `EmployeeManagement`            |
+| Physical path    | `C:\Publish\EmployeeManagement` |
+| Application Pool | `EmployeeManagementPool`        |
+| Type             | `http`                          |
+| IP Address       | `All Unassigned`                |
+| Port             | `8080`                          |
+| Host name        | Leave blank                     |
+
+So it should effectively be:
+
+```text
+Site name:
+EmployeeManagement
+
+Physical path:
+C:\Publish\EmployeeManagement
+
+Application Pool:
+EmployeeManagementPool
+
+Binding:
+http
+Port:
+8080
+```
+
+Click **OK**.
+
+---
+
+# Step 4 — Start the website
+
+Under:
+
+```text
+Sites
+   └── EmployeeManagement
+```
+
+make sure the website is **Started**.
+
+Also go to:
+
+```text
+Application Pools
+   └── EmployeeManagementPool
+```
+
+and make sure it is **Started**.
+
+---
+
+# Step 5 — Don't configure SQL Server yet
+
+We now know the exact IIS Application Pool name:
+
+```text
+IIS APPPOOL\EmployeeManagementPool
+```
+
+**Now** we can go back to SSMS and configure the SQL Server login.
+
+But before doing that, there's one useful test.
+
+Open your browser on the same computer and go to:
+
+```text
+http://localhost:8080
+```
+
+Because this is an API, you may get something like:
+
+```text
+404
+```
+
+or a blank response. **That doesn't automatically mean IIS is broken.**
+
+If your application has Swagger enabled in the published environment, try:
+
+```text
+http://localhost:8080/swagger
+```
+
+If Swagger isn't available in production, we'll test an actual endpoint, for example:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+---
+
+## If you get a 500.30 / 500.31 / 502.5
+
+Don't start changing random IIS settings.
+
+Those errors usually tell us something specific about:
+
+* .NET runtime/Hosting Bundle
+* Application startup
+* `appsettings.json`
+* Database connection
+* Permissions
+* Application configuration
+
+We can diagnose the exact error.
+
+### Your current setup should now look like:
+
+```text
+Visual Studio
+      │
+      │ Publish
+      ↓
+C:\Publish\EmployeeManagement
+      │
+      ↓
+IIS Website
+EmployeeManagement
+      │
+      ↓
+EmployeeManagementPool
+      │
+      ↓
+ASP.NET Core / .NET 8
+      │
+      ↓
+SQL Server Express
+      │
+      ↓
+Dapper Database
+```
+
+**Do Steps 2–4 first.** Once the IIS Website and `EmployeeManagementPool` are created, tell me what happens when you open `http://localhost:8080`.
+
+
+
+
+
+
+
+
+Which one is the application pool? 
+
+
+You're currently on the **server Home** screen in IIS Manager. The Application Pool is not visible in the main panel.
+
+### Click this on the right side
+
+In your screenshot, under **Actions**, you have:
+
+**`View Application Pools`**
+
+Click that.
+
+Alternatively, on the left side:
+
+1. Click the small arrow next to your computer name:
+   `LAPTOP-ED55U69O`
+2. You should see:
+
+   ```text
+   Application Pools
+   Sites
+   ```
+3. Click **Application Pools**.
+
+You will then see the list of application pools.
+
+### What to do next
+
+If you haven't created one yet, you'll probably see:
+
+```text
+.NET v4.5
+DefaultAppPool
+```
+
+Then:
+
+**Right-click `Application Pools` → `Add Application Pool...`**
+
+Create:
+
+```text
+Name:
+EmployeeManagementPool
+
+.NET CLR Version:
+No Managed Code
+
+Managed Pipeline Mode:
+Integrated
+```
+
+Click **OK**.
+
+Then you'll have:
+
+```text
+Application Pools
+├── .NET v4.5
+├── DefaultAppPool
+└── EmployeeManagementPool   ← your pool
+```
+
+**Don't create the SQL Server login yet.** First create this pool. Then we'll use its exact name (`EmployeeManagementPool`) when configuring SQL Server.
+
+
+
+
+
+
+After creating application pool I am seeing like this 
+Is it correct? 
+
+
+
+
+
+
+
+Yes. **This is correct.** Your Application Pool has been created successfully.
+
+From your screenshot:
+
+| Setting          | Your value      | Correct?   |
+| ---------------- | --------------- | ---------  |
+| Application Pool | `Dapper_CRUD`   | ✅         |
+| Status           | Started         | ✅         |
+| .NET CLR Version | No Managed Code | ✅         |
+| Managed Pipeline | Integrated      | ✅         |
+| Applications     | 0               | ✅ for now |
+
+The **Applications = 0** is normal because you haven't associated your IIS website with this pool yet.
+
+### Your next step: Create the IIS Website
+
+You now have:
+
+```text
+Application Pool
+└── Dapper_CRUD
+```
+
+Now on the **left side**, right-click:
+
+```text
+Sites
+```
+
+and select:
+
+```text
+Add Website...
+```
+
+You'll get the **Add Website** window.
+
+Enter:
+
+```text
+Site name:
+Dapper_CRUD
+```
+
+For **Physical path**, use the folder where you published your backend, for example:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+For **Application Pool**, select:
+
+```text
+Dapper_CRUD
+```
+
+For the binding:
+
+```text
+Type:       http
+IP address: All Unassigned
+Port:       8080
+Host name:  [leave blank]
+```
+
+So your configuration will look like:
+
+```text
+Add Website
+
+Site name:       Dapper_CRUD
+Physical path:   C:\Publish\EmployeeManagement
+Application pool: Dapper_CRUD
+
+Binding:
+Type:            http
+IP address:      All Unassigned
+Port:             8080
+Host name:        [blank]
+```
+
+Then click **OK**.
+
+### After that
+
+Your IIS structure should look approximately like:
+
+```text
+LAPTOP-ED55U69O
+│
+├── Application Pools
+│   ├── Dapper_CRUD       ← You created this
+│   └── DefaultAppPool
+│
+└── Sites
+    ├── Default Web Site
+    └── Dapper_CRUD       ← We'll create this now
+```
+
+**Go ahead and click `Sites → Add Website...`.** If you send me a screenshot of the **Add Website** window, I'll tell you exactly what to put in each field.
+
+
+
+
+
+
+
+
+Good. If you now have both **Application Pool `Dapper_CRUD`** and **IIS Site `Dapper_CRUD`** created, the next step is **SQL Server permission for the IIS Application Pool**.
+
+Your setup is now:
+
+```text
+IIS
+│
+├── Application Pools
+│   └── Dapper_CRUD
+│
+└── Sites
+    └── Dapper_CRUD
+         │
+         └── C:\Publish\EmployeeManagement
+```
+
+## Step 1 — Verify the IIS site's Application Pool
+
+In IIS:
+
+**Sites → Dapper_CRUD**
+
+Then on the right click **Basic Settings...**
+
+Check that:
+
+```text
+Application pool: Dapper_CRUD
+Physical path:    C:\Publish\EmployeeManagement
+```
+
+If both are correct, click **Cancel/OK**.
+
+---
+
+# Step 2 — Give IIS access to the published folder
+
+This is important.
+
+Go to Windows Explorer:
+
+```text
+C:\Publish
+```
+
+Right-click:
+
+```text
+EmployeeManagement
+```
+
+→ **Properties**
+
+→ **Security**
+
+→ **Edit**
+
+→ **Add**
+
+Enter:
+
+```text
+IIS AppPool\Dapper_CRUD
+```
+
+Click **Check Names**.
+
+It should resolve to something like:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+Give it:
+
+```text
+Read & execute
+List folder contents
+Read
+```
+
+You generally don't need to give it **Full Control**.
+
+Click **Apply → OK**.
+
+---
+
+# Step 3 — Now configure SQL Server
+
+This is where your earlier SSMS screen comes into play.
+
+Open SSMS and connect to:
+
+```text
+localhost\SQLEXPRESS
+```
+
+Go to:
+
+```text
+Security
+   ↓
+Logins
+```
+
+Right-click **Logins** → **New Login...**
+
+For **Login name**, enter:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+Select:
+
+```text
+Windows authentication
+```
+
+Then click **User Mapping** on the left.
+
+Find:
+
+```text
+Dapper
+```
+
+and tick it:
+
+```text
+☑ Dapper
+```
+
+At the bottom, select:
+
+```text
+☑ db_datareader
+☑ db_datawriter
+☑ public
+```
+
+Then click **OK**.
+
+Your authentication flow will now be:
+
+```text
+Browser / Angular
+       ↓
+IIS
+       ↓
+Dapper_CRUD Application Pool
+       ↓
+IIS APPPOOL\Dapper_CRUD
+       ↓
+SQL Server
+       ↓
+Dapper Database
+```
+
+And your existing connection string can remain:
+
+```json
+"ConnectionStrings": {
+  "DbConn": "Server=localhost\\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+```
+
+---
+
+# Step 4 — Restart the Application Pool
+
+In IIS:
+
+```text
+Application Pools
+    ↓
+Dapper_CRUD
+```
+
+Right-click → **Recycle**.
+
+Or use **Stop**, then **Start**.
+
+---
+
+# Step 5 — Test the API
+
+Now open a browser and try:
+
+```text
+http://localhost:8080
+```
+
+Since this is an API, don't worry if `/` gives a 404.
+
+Try your actual endpoint, for example:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+Or, if Swagger is enabled in the published application:
+
+```text
+http://localhost:8080/swagger
+```
+
+### What we want to see
+
+If:
+
+```text
+/swagger
+```
+
+opens → **IIS + ASP.NET Core hosting is working.**
+
+If you get:
+
+```text
+500.30
+500.31
+502.5
+```
+
+or another error, **don't change anything randomly**. Send me the exact error and we'll fix that specific issue.
+
+**Do Steps 1–5 in order. The most important next action right now is creating the `IIS APPPOOL\Dapper_CRUD` SQL Server login.**
+
+
+
+
+
+
+
+
+==============================================================================================================================================================================================================
+
+
+
+
+
+After clicking on Ok a message pops up :-
+
+
+=================================== 
+ 
+You must enter a Login name. (SqlManagerUI) 
+ 
+------------------------------ 
+Program Location: 
+ 
+   at Microsoft.SqlServer.Management.SqlManagerUI.CreateLoginGeneral.OnGatherUiInformation(RunType runType) 
+   at Microsoft.SqlServer.Management.SqlMgmt.ViewSwitcherControlsManager.OnGatherUiInformation(RunType runType) 
+ 
+
+
+
+==============================================================================================================================================================================================================
+
+
+
+
+
+That error means **the Login name field in the SSMS `New Login` window was left empty**. My previous instruction was too compressed.
+
+You are at the **Login - New** window. Let's do it carefully.
+
+### 1. Go back to the `General` tab
+
+On the left side, click:
+
+**General**
+
+You should see a field near the top:
+
+**Login name:** `[________________]`
+
+Enter exactly:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+So it should look like:
+
+```text
+Login name: IIS APPPOOL\Dapper_CRUD
+```
+
+### 2. Authentication
+
+Under that, select:
+
+**Windows authentication**
+
+Do **not** select SQL Server authentication.
+
+### 3. Important: Don't use `Search...` yet
+
+Just type the following directly into **Login name**:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+You don't need to enter a password.
+
+### 4. Then click `User Mapping`
+
+On the left:
+
+```text
+General
+Server Roles
+User Mapping  ← click this
+Securables
+Status
+```
+
+Find:
+
+```text
+Dapper
+```
+
+and check:
+
+```text
+☑ Dapper
+```
+
+At the bottom, select:
+
+```text
+☑ db_datareader
+☑ db_datawriter
+☑ public
+```
+
+### 5. Then click OK
+
+Now SSMS should accept it.
+
+---
+
+### If `IIS APPPOOL\Dapper_CRUD` gives another error
+
+That's okay. **Don't change anything else.**
+
+Send me a screenshot of your **Login - New → General** screen before clicking OK. I can see exactly what field is missing and tell you what to enter.
+
+
+
+
+
+
+
+==============================================================================================================================================================================================================
+
+
+
+In SSMS in Object Explorer Inside Security => Logins now i can see IIS APPPOOL\Dapper_CRUD
+
+is it correct now tell me the next step?
+
+
+
+==============================================================================================================================================================================================================
+
+
+
+
+
+
+
+
+Yes. **That is correct.** Seeing:
+
+```text
+Security
+└── Logins
+    └── IIS APPPOOL\Dapper_CRUD
+```
+
+means the **SQL Server login has been created successfully**. ✅
+
+Now we need to make sure this login has access to your `Dapper` database.
+
+## Step 1 — Verify `Dapper` database mapping
+
+In SSMS:
+
+```text
+Security
+   ↓
+Logins
+   ↓
+IIS APPPOOL\Dapper_CRUD
+```
+
+**Right-click `IIS APPPOOL\Dapper_CRUD` → Properties**
+
+A **Login Properties** window will open.
+
+On the left, click:
+
+```text
+User Mapping
+```
+
+You should see your databases.
+
+Find:
+
+```text
+Dapper
+```
+
+Make sure this is checked:
+
+```text
+☑ Dapper
+```
+
+Then look at the bottom:
+
+```text
+Database role membership for: Dapper
+```
+
+Make sure you have:
+
+```text
+☑ public
+☑ db_datareader
+☑ db_datawriter
+```
+
+For your current local IIS learning setup, this is sufficient for normal CRUD operations.
+
+Then click **OK**.
+
+---
+
+# Step 2 — Check the published folder permissions
+
+Now go to:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+Right-click the folder:
+
+**Properties → Security → Edit → Add**
+
+Enter:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+Click **Check Names**.
+
+It should resolve successfully.
+
+Give it:
+
+```text
+Read & execute
+List folder contents
+Read
+```
+
+Then:
+
+**Apply → OK → OK**
+
+This allows IIS to read your published application files.
+
+---
+
+# Step 3 — Verify your IIS Website
+
+Open IIS Manager:
+
+```text
+Sites
+   ↓
+Dapper_CRUD
+```
+
+Right-click:
+
+**Manage Website → Advanced Settings...**
+
+Check:
+
+```text
+Application Pool = Dapper_CRUD
+```
+
+Also check the physical path is:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+If those are correct, you're good.
+
+---
+
+# Step 4 — Check Application Pool
+
+Go to:
+
+```text
+Application Pools
+   ↓
+Dapper_CRUD
+```
+
+It should show:
+
+```text
+Status:              Started
+.NET CLR Version:    No Managed Code
+Managed Pipeline:    Integrated
+```
+
+Your screenshot earlier already showed these settings correctly. ✅
+
+---
+
+# Step 5 — Recycle the Application Pool
+
+Right-click:
+
+```text
+Dapper_CRUD
+```
+
+and select:
+
+**Recycle**
+
+Wait a few seconds.
+
+---
+
+# Step 6 — Test your API
+
+Now open your browser.
+
+Since you configured port `8080`, first try:
+
+```text
+http://localhost:8080
+```
+
+Because this is an API, a `404` at the root URL isn't necessarily a problem.
+
+### Better: test your actual API endpoint
+
+For example, if your controller is:
+
+```csharp
+[Route("api/[controller]")]
+public class EmployeeController : ControllerBase
+```
+
+try:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+Or, if Swagger is enabled:
+
+```text
+http://localhost:8080/swagger
+```
+
+### What we're looking for
+
+If Swagger opens:
+
+```text
+http://localhost:8080/swagger
+```
+
+then your chain is working:
+
+```text
+Browser
+   ↓
+IIS
+   ↓
+Dapper_CRUD Application Pool
+   ↓
+ASP.NET Core .NET 8
+   ↓
+Dapper
+   ↓
+SQL Server Express
+```
+
+If you get an error such as:
+
+```text
+500.30
+500.31
+502.5
+500
+```
+
+**don't make further changes yet.** Send me the exact error/screenshot. We can identify whether it is the .NET Hosting Bundle, application startup, database permission, connection string, or IIS configuration.
+
+### One thing I want you to check first
+
+Before testing the API, go into:
+
+**`IIS APPPOOL\Dapper_CRUD` → Properties → User Mapping**
+
+and confirm that **`Dapper` is checked**. That is the next immediate step.
+
+
+
+
+
+
+==============================================================================================================================================================================================================
+
+
+
+I have entered there IIS APPPOOL\Dapper_CRUD but it is coming Dapper_CRUD only
+
+is that ok?
+any error will be there?
+
+
+==============================================================================================================================================================================================================
+
+
+
+
+Yes — **that is correct and there is no error.** You're seeing two different names because SQL Server distinguishes between the **server login** and the **database user**.
+
+### What you entered
+
+At the server level, you created:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+You can see this under:
+
+```text
+Security
+  → Logins
+     → IIS APPPOOL\Dapper_CRUD
+```
+
+✅ This is correct.
+
+### Why User Mapping shows only `Dapper_CRUD`
+
+When you go to:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+    → Properties
+    → User Mapping
+    → Dapper
+```
+
+SQL Server may show the **database user name** as:
+
+```text
+Dapper_CRUD
+```
+
+That's normal.
+
+The relationship is:
+
+```text
+Windows/IIS Identity
+        ↓
+IIS APPPOOL\Dapper_CRUD
+        ↓
+SQL Server Login
+        ↓
+Dapper database
+        ↓
+Database User = Dapper_CRUD
+```
+
+So you should **not change `Dapper_CRUD` to `IIS APPPOOL\Dapper_CRUD`** in the User Mapping user field.
+
+### What you should verify now
+
+In **Login Properties → User Mapping**:
+
+```text
+Database          Map
+-----------------------
+☑ Dapper
+```
+
+Then at the bottom:
+
+```text
+Database role membership for: Dapper
+
+☑ public
+☑ db_datareader
+☑ db_datawriter
+```
+
+If those are selected, click **OK**.
+
+Then we can move to the next step: **testing your API through IIS**.
+
+One important distinction:
+
+* **Login name:** `IIS APPPOOL\Dapper_CRUD` ✅
+* **Database user:** `Dapper_CRUD` ✅
+
+They are supposed to look different.
+
+
+
+
+
+
+
+
+RECYCLE OPTION
+
+
+
+
+
+That's likely because you're looking at the **website (`Sites → Dapper_CRUD`)**, not the **Application Pool**.
+
+### Go here:
+
+In IIS Manager, on the **left panel**:
+
+```text
+LAPTOP-ED55U69O
+│
+├── Application Pools   ← click this
+│
+└── Sites
+    └── Dapper_CRUD
+```
+
+Click **Application Pools**.
+
+You should see:
+
+```text
+Dapper_CRUD
+```
+
+in the middle panel.
+
+### Then:
+
+1. **Right-click `Dapper_CRUD`**
+2. You should see:
+
+   * Start
+   * Stop
+   * **Recycle**
+   * Advanced Settings
+   * Basic Settings
+   * Remove
+
+Click:
+
+**Recycle**
+
+---
+
+### If you still don't see Recycle
+
+Select `Dapper_CRUD` once.
+
+Look at the **right-hand Actions panel**. Under **Application Pool Tasks**, you should see:
+
+```text
+Stop
+Recycle
+Advanced Settings...
+Basic Settings...
+```
+
+Click **Recycle** there.
+
+### One important point
+
+You don't actually need to recycle it if you **just created the Application Pool and Website** and haven't changed anything after starting it. Recycling is mainly useful after configuration changes.
+
+So if you cannot find it, **don't get stuck here**. We can proceed directly to testing:
+
+
+http://localhost:8080/api/Employee
+
+
+That's the more important next step.
+
+
+
+
+
+
+
+This page isn’t working
+
+**localhost** is currently unable to handle this request.
+
+HTTP ERROR 500
+
+
+
+
+
+
+
+
+That is useful: **IIS is receiving the request, but your ASP.NET Core application is failing somewhere behind IIS.** Don't change random settings yet.
+
+For your setup, the most likely causes are:
+
+1. `Dapper_CRUD` IIS application pool identity cannot access SQL Server.
+2. The published `appsettings.json`/connection string is wrong.
+3. The .NET 8 Hosting Bundle/runtime isn't correctly installed.
+4. Your application is throwing an exception during startup or while executing `GetEmployees()`.
+
+Let's identify the exact error.
+
+## Step 1 — Check Windows Event Viewer
+
+Press:
+
+```text
+Win + R
+```
+
+Type:
+
+```text
+eventvwr
+```
+
+Press Enter.
+
+Go to:
+
+```text
+Windows Logs
+    ↓
+Application
+```
+
+Look for a recent **Error** at the time you tried:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+Look for entries mentioning:
+
+```text
+ASP.NET Core
+IIS
+IIS AspNetCore Module
+Dapper_CRUD
+.NET Runtime
+```
+
+If you find one, send me the **error message/details**.
+
+---
+
+## Step 2 — Enable ASP.NET Core stdout logging
+
+This is even more useful.
+
+Go to your published folder:
+
+```text
+C:\Publish\EmployeeManagement
+```
+
+Open:
+
+
+web.config
+
+
+
+You'll probably have something similar to:
+
+
+<aspNetCore processPath="dotnet"
+            arguments=".\Dapper_CRUD.dll"
+            stdoutLogEnabled="false"
+            stdoutLogFile=".\logs\stdout"
+            hostingModel="inprocess" />
+
+
+Change:
+
+
+stdoutLogEnabled="false"
+
+
+to:
+
+
+
+stdoutLogEnabled="true"
+
+
+So:
+
+
+<aspNetCore processPath="dotnet"
+            arguments=".\Dapper_CRUD.dll"
+            stdoutLogEnabled="true"
+            stdoutLogFile=".\logs\stdout"
+            hostingModel="inprocess" />
+
+
+### Then create a logs folder
+
+Inside:
+
+
+C:\Publish\EmployeeManagement
+
+
+create:
+
+
+logs
+
+
+So:
+
+
+C:\Publish\EmployeeManagement
+│
+├── Dapper_CRUD.dll
+├── web.config
+├── appsettings.json
+├── ...
+└── logs
+
+
+Then make sure the IIS identity:
+
+
+IIS APPPOOL\Dapper_CRUD
+
+
+has **Write** permission on that `logs` folder.
+
+---
+
+## Step 3 — Restart the IIS site
+
+In IIS:
+
+
+Sites
+   ↓
+Dapper_CRUD
+
+
+Right-click:
+
+
+
+Manage Website
+   ↓
+Restart
+
+
+Then open again:
+
+
+http://localhost:8080/api/Employee
+
+
+
+
+## Step 4 — Check the log
+
+Go back to:
+
+
+C:\Publish\EmployeeManagement\logs
+
+
+You should hopefully get a file such as:
+
+
+stdout_....log
+
+
+Open that file.
+
+It should tell us the **actual .NET exception**.
+
+For example, if the problem is SQL Server permissions, you may see something similar to:
+
+
+Login failed for user 'IIS APPPOOL\Dapper_CRUD'
+
+
+If the Hosting Bundle is the problem, you'll see a runtime-related error.
+
+If your application has a configuration problem, you'll see that instead.
+
+---
+
+### One important thing
+
+You **already created**:
+
+
+IIS APPPOOL\Dapper_CRUD
+
+
+in SQL Server, so that's good.
+
+But make sure in **Login Properties → User Mapping** you have:
+
+
+Dapper    ☑
+
+
+and:
+
+
+public          ☑
+db_datareader   ☑
+db_datawriter   ☑
+
+
+Then click **OK**.
+
+---
+
+### Don't modify your C# controller
+
+Your controller is not the first thing I'd change. A generic IIS `500` is an **environment/deployment error until proven otherwise**.
+
+**Do Step 2 and reproduce the error. Then open the generated `stdout_*.log` and paste its contents here.** That will let us diagnose the actual failure instead of guessing.
