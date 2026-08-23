@@ -1,0 +1,2050 @@
+Absolutely. Below is a **company-documentation-style deployment procedure** based on the IIS deployment we have been doing for your **Dapper CRUD ASP.NET Core Web API**.
+
+I have written it so that another developer who has never deployed an ASP.NET Core API to IIS can follow it from beginning to end.
+
+> **Example application used in this document:** `Dapper_CRUD`
+> **Framework:** .NET 8
+> **Database:** SQL Server / SQL Express
+> **Database:** `Dapper`
+> **IIS Application Pool:** `Dapper_CRUD`
+> **Published application folder:** `D:\IIS-Publish`
+
+---
+
+# ASP.NET Core Web API Deployment on IIS
+
+## 1. Purpose
+
+This document explains how to deploy an **ASP.NET Core Web API application** on **Microsoft IIS (Internet Information Services)**.
+
+The deployment process consists of:
+
+```text
+Source Code
+    ↓
+Download / Clone Application
+    ↓
+Restore NuGet Packages
+    ↓
+Build Application
+    ↓
+Publish Application
+    ↓
+Install .NET Hosting Bundle
+    ↓
+Install / Configure IIS
+    ↓
+Create IIS Application Pool
+    ↓
+Create IIS Website/Application
+    ↓
+Configure SQL Server Permissions
+    ↓
+Test API
+```
+
+---
+
+# 2. Prerequisites
+
+Before starting, make sure the server/development machine has:
+
+### Software
+
+* Windows
+* IIS
+* .NET SDK required by the application
+* ASP.NET Core Hosting Bundle
+* SQL Server / SQL Express
+* SQL Server Management Studio (SSMS)
+* Git, if source code is stored in Git
+* Web browser
+* Administrator access
+
+For our application:
+
+```text
+.NET: 8.0
+Database: SQL Server Express
+Database Name: Dapper
+```
+
+---
+
+# 3. Check the .NET Version Used by the Application
+
+First open the application's `.csproj` file.
+
+For example:
+
+```xml
+<TargetFramework>net8.0</TargetFramework>
+```
+
+This tells us that the application is built using:
+
+```text
+.NET 8
+```
+
+This is important because IIS must have the appropriate ASP.NET Core runtime/Hosting Bundle installed.
+
+---
+
+# 4. Check Installed .NET Versions
+
+Open **Command Prompt** or **PowerShell** and run:
+
+```powershell
+dotnet --version
+```
+
+This shows the currently selected SDK.
+
+Example:
+
+```text
+8.0.xxx
+```
+
+To see all installed SDKs:
+
+```powershell
+dotnet --list-sdks
+```
+
+To see all installed runtimes:
+
+```powershell
+dotnet --list-runtimes
+```
+
+For example:
+
+```text
+Microsoft.AspNetCore.App 8.0.30
+Microsoft.NETCore.App 8.0.30
+```
+
+---
+
+# 5. Download the Application Source Code
+
+If the application is stored in GitHub/Git, first install Git.
+
+Check whether Git is installed:
+
+```powershell
+git --version
+```
+
+Example:
+
+```text
+git version 2.x.x
+```
+
+If Git is not installed, install Git on the machine.
+
+---
+
+## 5.1 Clone the Application
+
+Go to the folder where you want to keep the source code.
+
+Example:
+
+```powershell
+cd D:\
+```
+
+Create a source-code folder:
+
+```powershell
+mkdir Projects
+```
+
+Go inside it:
+
+```powershell
+cd D:\Projects
+```
+
+Clone the repository:
+
+```powershell
+git clone <REPOSITORY-URL>
+```
+
+For example:
+
+```powershell
+git clone https://github.com/company/Dapper-API-React.git
+```
+
+**Important:** Replace the URL with your company's actual repository URL.
+
+After cloning:
+
+```powershell
+cd Dapper-API-React
+```
+
+---
+
+# 6. Verify the Project
+
+Find the `.csproj` file.
+
+For example:
+
+```text
+D:\Projects\Dapper-API-React\Dapper_CRUD\Dapper_CRUD.csproj
+```
+
+Move into the project directory:
+
+```powershell
+cd D:\Projects\Dapper-API-React\Dapper_CRUD
+```
+
+Check the files:
+
+```powershell
+dir
+```
+
+You should see things such as:
+
+```text
+Controllers
+Models
+Service
+Program.cs
+appsettings.json
+Dapper_CRUD.csproj
+```
+
+---
+
+# 7. Restore NuGet Packages
+
+Run:
+
+```powershell
+dotnet restore
+```
+
+### What does this do?
+
+The application may use packages such as:
+
+* Dapper
+* Microsoft.Data.SqlClient
+* ASP.NET Core packages
+* Swagger/OpenAPI packages
+
+`dotnet restore` downloads/restores the required NuGet packages.
+
+Think of it as:
+
+```text
+Project files
+      ↓
+dotnet restore
+      ↓
+Required NuGet packages downloaded
+```
+
+---
+
+# 8. Build the Application
+
+Run:
+
+```powershell
+dotnet build
+```
+
+If everything is correct, you should see:
+
+```text
+Build succeeded.
+```
+
+If there are compilation errors, fix them before continuing.
+
+---
+
+# 9. Configure the Database Connection
+
+Open:
+
+```text
+appsettings.json
+```
+
+For our application, the connection string was:
+
+```json
+{
+  "ConnectionStrings": {
+    "DbConn": "Server=localhost\\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+  }
+}
+```
+
+### Explanation
+
+```text
+Server=localhost\SQLEXPRESS
+```
+
+SQL Server Express is running on the same machine.
+
+```text
+Database=Dapper
+```
+
+The application connects to the `Dapper` database.
+
+```text
+Trusted_Connection=True
+```
+
+Windows Authentication is being used.
+
+```text
+TrustServerCertificate=True
+```
+
+The SQL Server certificate is trusted for this connection.
+
+---
+
+# 10. Verify SQL Server Database
+
+Open SSMS.
+
+Connect to:
+
+```text
+localhost\SQLEXPRESS
+```
+
+Go to:
+
+```text
+Databases
+    ↓
+Dapper
+```
+
+Make sure the database exists.
+
+---
+
+# 11. Verify Required Tables
+
+Inside:
+
+```text
+Dapper
+    ↓
+Tables
+```
+
+Verify the required tables exist.
+
+For example:
+
+```text
+Employees
+Managers
+```
+
+depending on your application.
+
+---
+
+# 12. Verify Stored Procedures
+
+Go to:
+
+```text
+Dapper
+    ↓
+Programmability
+    ↓
+Stored Procedures
+```
+
+Our application contained procedures such as:
+
+```text
+sp_AddEmp
+sp_AddManager
+sp_DeleteEmployee
+sp_GetEmployee
+sp_GetEmployeeById
+sp_GetManagerById
+sp_GetManagers
+sp_UpdateEmployee
+sp_UpdatEmployees
+```
+
+The exact list depends on the application.
+
+---
+
+# 13. Test Stored Procedures in SSMS
+
+Before IIS deployment, verify that the procedures themselves work.
+
+For example:
+
+```sql
+EXEC sp_GetEmployee;
+```
+
+For a particular employee:
+
+```sql
+EXEC sp_GetEmployeeById 1;
+```
+
+For the other procedures, use their required parameters.
+
+This separates:
+
+```text
+SQL problem
+```
+
+from:
+
+```text
+IIS/application problem
+```
+
+---
+
+# 14. Publish the Application
+
+This is one of the most important steps.
+
+From the project directory:
+
+```powershell
+cd D:\Projects\Dapper-API-React\Dapper_CRUD
+```
+
+Run:
+
+```powershell
+dotnet publish -c Release
+```
+
+The default publish folder will normally be:
+
+```text
+bin\Release\net8.0\publish
+```
+
+So, for example:
+
+```text
+D:\Projects\Dapper-API-React\Dapper_CRUD\bin\Release\net8.0\publish
+```
+
+---
+
+# 15. Publish Directly to IIS Folder
+
+Instead of manually copying the files, we can publish directly to:
+
+```text
+D:\IIS-Publish
+```
+
+First create the folder:
+
+```powershell
+mkdir D:\IIS-Publish
+```
+
+Then run:
+
+```powershell
+dotnet publish -c Release -o D:\IIS-Publish
+```
+
+Now the compiled application will be placed directly into:
+
+```text
+D:\IIS-Publish
+```
+
+You should see files such as:
+
+```text
+D:\IIS-Publish
+│
+├── Dapper_CRUD.dll
+├── Dapper_CRUD.deps.json
+├── Dapper_CRUD.runtimeconfig.json
+├── appsettings.json
+├── web.config
+└── other DLLs
+```
+
+---
+
+# 16. Why `dotnet publish` Is Required
+
+Do not simply copy the source-code folder to IIS.
+
+For example, this is **not the proper IIS deployment approach**:
+
+```text
+D:\Projects\Dapper-API-React
+```
+
+Instead, IIS should point to the **published output**:
+
+```text
+D:\IIS-Publish
+```
+
+The publishing process prepares the application for deployment.
+
+---
+
+# 17. Install ASP.NET Core Hosting Bundle
+
+This is required for ASP.NET Core applications running behind IIS.
+
+The Hosting Bundle installs the components IIS needs to host ASP.NET Core applications.
+
+For a .NET 8 application, install the appropriate:
+
+```text
+ASP.NET Core Hosting Bundle for .NET 8
+```
+
+In our environment we had:
+
+```text
+Microsoft.AspNetCore.App 8.0.30
+```
+
+and the .NET 8 Hosting Bundle was installed.
+
+### Important distinction
+
+Do not document:
+
+> "IIS 8.0.30"
+
+as the IIS version.
+
+`8.0.30` is the **ASP.NET Core/.NET runtime version**.
+
+IIS itself is a Windows component and has its own version.
+
+---
+
+# 18. Verify ASP.NET Core Hosting Installation
+
+Run:
+
+```powershell
+dotnet --list-runtimes
+```
+
+Look for:
+
+```text
+Microsoft.AspNetCore.App 8.0.x
+Microsoft.NETCore.App 8.0.x
+```
+
+Also verify that this file exists:
+
+```text
+C:\Program Files\IIS\Asp.Net Core Module\V2
+```
+
+The ASP.NET Core Module allows IIS to communicate with the ASP.NET Core application.
+
+---
+
+# 19. Install IIS
+
+Open:
+
+```text
+Control Panel
+    ↓
+Programs
+    ↓
+Turn Windows features on or off
+```
+
+Enable:
+
+```text
+Internet Information Services
+```
+
+At minimum, ensure IIS Management Console and the required Web Server components are installed.
+
+You can also verify IIS using:
+
+```powershell
+inetmgr
+```
+
+This opens:
+
+```text
+Internet Information Services (IIS) Manager
+```
+
+---
+
+# 20. Verify IIS Is Running
+
+Open a browser and enter:
+
+```text
+http://localhost
+```
+
+You should get the IIS welcome page if the default IIS website is running.
+
+---
+
+# 21. Create an IIS Application Pool
+
+Open:
+
+```text
+IIS Manager
+```
+
+On the left:
+
+```text
+Application Pools
+```
+
+Right-click:
+
+```text
+Application Pools
+    ↓
+Add Application Pool
+```
+
+Enter:
+
+```text
+Name:
+Dapper_CRUD
+```
+
+Set:
+
+```text
+.NET CLR Version:
+No Managed Code
+```
+
+Set:
+
+```text
+Managed pipeline mode:
+Integrated
+```
+
+Then click:
+
+```text
+OK
+```
+
+---
+
+# 22. Why "No Managed Code"?
+
+ASP.NET Core does not use the old ASP.NET Framework CLR hosting model.
+
+IIS acts as a reverse proxy/front-end.
+
+The ASP.NET Core application runs through the ASP.NET Core Module.
+
+Therefore:
+
+```text
+.NET CLR Version = No Managed Code
+```
+
+is the standard configuration for ASP.NET Core IIS hosting.
+
+---
+
+# 23. Configure Application Pool Identity
+
+Select:
+
+```text
+Dapper_CRUD
+```
+
+Right-click:
+
+```text
+Advanced Settings
+```
+
+Find:
+
+```text
+Identity
+```
+
+Set it to:
+
+```text
+ApplicationPoolIdentity
+```
+
+This creates the Windows identity:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+This identity is important because our application uses Windows Authentication to connect to SQL Server.
+
+---
+
+# 24. Configure Application Pool Settings
+
+For a basic deployment:
+
+```text
+.NET CLR Version = No Managed Code
+Managed Pipeline = Integrated
+Identity = ApplicationPoolIdentity
+```
+
+The Application Pool can remain:
+
+```text
+Start Mode = OnDemand
+```
+
+unless the application specifically requires preloading.
+
+---
+
+# 25. Give IIS Permission to the Published Folder
+
+The application is located at:
+
+```text
+D:\IIS-Publish
+```
+
+The Application Pool identity needs permission to access this folder.
+
+Right-click:
+
+```text
+D:\IIS-Publish
+```
+
+Select:
+
+```text
+Properties
+    ↓
+Security
+    ↓
+Edit
+    ↓
+Add
+```
+
+Enter:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+Click:
+
+```text
+Check Names
+```
+
+It should resolve the account.
+
+Give the account the required permissions, typically:
+
+```text
+Read & Execute
+List folder contents
+Read
+```
+
+Do not give unnecessary Full Control.
+
+---
+
+# 26. Create the IIS Website/Application
+
+In IIS Manager:
+
+```text
+Sites
+```
+
+Right-click:
+
+```text
+Sites
+    ↓
+Add Website
+```
+
+For example:
+
+```text
+Site name:
+Dapper_CRUD
+```
+
+Physical path:
+
+```text
+D:\IIS-Publish
+```
+
+Application Pool:
+
+```text
+Dapper_CRUD
+```
+
+Binding can initially be:
+
+```text
+Type: http
+IP Address: All Unassigned
+Port: 80
+Host name: blank
+```
+
+However, if port 80 is already occupied, use another port, such as:
+
+```text
+8080
+```
+
+Then the application can be accessed as:
+
+```text
+http://localhost:8080
+```
+
+---
+
+# 27. Important: Site vs Application
+
+There are two common IIS structures.
+
+### Option A — Website
+
+```text
+Sites
+   └── Dapper_CRUD
+       └── Physical Path: D:\IIS-Publish
+```
+
+### Option B — Application under a Website
+
+For example:
+
+```text
+Sites
+   └── Default Web Site
+       └── api
+```
+
+with:
+
+```text
+Physical Path: D:\IIS-Publish
+Application Pool: Dapper_CRUD
+```
+
+In your screenshot, you were creating:
+
+```text
+Site: Dapper_CRUD
+Alias: api
+```
+
+That is creating an **Application** under the `Dapper_CRUD` site.
+
+The URL would therefore become something like:
+
+```text
+http://localhost/api
+```
+
+and your API endpoint:
+
+```text
+http://localhost/api/Employee
+```
+
+Make sure the URL you test matches the IIS structure you actually created.
+
+---
+
+# 28. Verify Application Pool
+
+In IIS:
+
+```text
+Application Pools
+```
+
+you should see:
+
+```text
+Dapper_CRUD
+```
+
+The status should be:
+
+```text
+Started
+```
+
+If it is stopped:
+
+```text
+Right-click → Start
+```
+
+---
+
+# 29. Configure SQL Server Login for IIS
+
+This was the major issue we encountered during your deployment.
+
+Because your application uses:
+
+```text
+Trusted_Connection=True
+```
+
+SQL Server needs to recognize the IIS Application Pool identity.
+
+Open SSMS and go to:
+
+```text
+Security
+    ↓
+Logins
+```
+
+Create a login:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+The login should exist at the SQL Server level.
+
+---
+
+# 30. Create/Verify Database User
+
+Open:
+
+```text
+Databases
+    ↓
+Dapper
+    ↓
+Security
+    ↓
+Users
+```
+
+There should be a database user corresponding to:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+In our case, we verified:
+
+```text
+DatabaseUser                  ServerLogin
+------------------------------------------------
+IIS APPPOOL\Dapper_CRUD       IIS APPPOOL\Dapper_CRUD
+```
+
+This is correct.
+
+---
+
+# 31. Important: Do Not Use the Wrong User Name
+
+We encountered this error:
+
+```text
+Cannot find the user 'Dapper', because it does not exist
+or you do not have permission.
+
+The login already has an account under a different user name.
+```
+
+This happened because the database user and login names were being confused.
+
+The correct identity is:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+not:
+
+```text
+Dapper
+```
+
+The database is:
+
+```text
+Dapper
+```
+
+The IIS identity is:
+
+```text
+IIS APPPOOL\Dapper_CRUD
+```
+
+These are two completely different things.
+
+---
+
+# 32. Grant EXECUTE Permission on Stored Procedures
+
+This is the **critical step that caused your HTTP 500 error**.
+
+Your Event Viewer/IIS log showed:
+
+```text
+The EXECUTE permission was denied on the object 'sp_GetEmployee',
+database 'Dapper', schema 'dbo'.
+```
+
+and:
+
+```text
+The EXECUTE permission was denied on the object 'sp_GetEmployeeById',
+database 'Dapper', schema 'dbo'.
+```
+
+This means:
+
+```text
+IIS → Application → SQL Server
+```
+
+was actually working.
+
+SQL Server recognized the IIS account.
+
+But SQL Server was saying:
+
+> "This account is allowed to connect to the database, but it is not allowed to execute this stored procedure."
+
+---
+
+# 33. Grant Permission to All Required Procedures
+
+In SSMS, select the `Dapper` database and execute:
+
+```sql
+USE Dapper;
+GO
+
+GRANT EXECUTE ON dbo.sp_AddEmp TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_AddManager TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_DeleteEmployee TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_GetEmployee TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_GetEmployeeById TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_GetManagerById TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_GetManagers TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_UpdateEmployee TO [IIS APPPOOL\Dapper_CRUD];
+GRANT EXECUTE ON dbo.sp_UpdatEmployees TO [IIS APPPOOL\Dapper_CRUD];
+GO
+```
+
+This is based on the stored procedure list you provided.
+
+---
+
+# 34. Better Long-Term Approach: Database Role
+
+For a company application, instead of individually granting permissions to every stored procedure, you can create a database role.
+
+For example:
+
+```sql
+USE Dapper;
+GO
+
+CREATE ROLE DapperApiRole;
+GO
+
+GRANT EXECUTE TO DapperApiRole;
+GO
+
+ALTER ROLE DapperApiRole
+ADD MEMBER [IIS APPPOOL\Dapper_CRUD];
+GO
+```
+
+However, whether `GRANT EXECUTE` on the whole database is appropriate depends on your company's security policy.
+
+### More restrictive approach
+
+Grant only the procedures required by the application:
+
+```sql
+GRANT EXECUTE ON dbo.sp_GetEmployee TO DapperApiRole;
+GRANT EXECUTE ON dbo.sp_GetEmployeeById TO DapperApiRole;
+GRANT EXECUTE ON dbo.sp_AddEmp TO DapperApiRole;
+GRANT EXECUTE ON dbo.sp_UpdateEmployee TO DapperApiRole;
+GRANT EXECUTE ON dbo.sp_DeleteEmployee TO DapperApiRole;
+```
+
+For production systems, **least privilege is preferable**.
+
+---
+
+# 35. Verify SQL Permission
+
+You can check the permissions using:
+
+```sql
+USE Dapper;
+GO
+
+SELECT
+    dp.state_desc,
+    dp.permission_name,
+    OBJECT_NAME(dp.major_id) AS ObjectName
+FROM sys.database_permissions dp
+WHERE dp.grantee_principal_id =
+      DATABASE_PRINCIPAL_ID('IIS APPPOOL\Dapper_CRUD');
+```
+
+You should see permissions such as:
+
+```text
+GRANT
+EXECUTE
+sp_GetEmployee
+```
+
+etc.
+
+---
+
+# 36. Restart the IIS Application
+
+After changing configuration or permissions, restart the Application Pool.
+
+Go to:
+
+```text
+IIS Manager
+    ↓
+Application Pools
+    ↓
+Dapper_CRUD
+```
+
+Right-click:
+
+```text
+Recycle
+```
+
+If **Recycle** isn't visible in your particular IIS view, you can:
+
+```text
+Stop
+```
+
+and then:
+
+```text
+Start
+```
+
+You can also restart IIS from an elevated Command Prompt:
+
+```cmd
+iisreset
+```
+
+### Important
+
+You normally do **not** need to restart IIS after every SQL permission change. But recycling the application pool is a clean way to ensure the application is restarted.
+
+---
+
+# 37. Test the API
+
+Your controller has:
+
+```csharp
+[Route("api/[controller]")]
+```
+
+and the controller is:
+
+```text
+EmployeeController
+```
+
+Therefore the base route is:
+
+```text
+/api/Employee
+```
+
+---
+
+# 38. API Endpoints
+
+Your controller contains the following endpoints.
+
+### GET all employees
+
+```http
+GET /api/Employee
+```
+
+Example:
+
+```text
+http://localhost/api/Employee
+```
+
+If using port 8080:
+
+```text
+http://localhost:8080/api/Employee
+```
+
+---
+
+### GET employee by ID
+
+```http
+GET /api/Employee/{id}
+```
+
+Example:
+
+```text
+http://localhost/api/Employee/1
+```
+
+---
+
+### POST employee
+
+```http
+POST /api/Employee
+```
+
+Request body depends on your `Employee` model.
+
+Example:
+
+```json
+{
+    "employeeName": "John",
+    "salary": 50000
+}
+```
+
+Use the actual properties of your model.
+
+---
+
+### PUT employee
+
+```http
+PUT /api/Employee/{id}
+```
+
+Example:
+
+```text
+PUT /api/Employee/1
+```
+
+---
+
+### DELETE employee
+
+```http
+DELETE /api/Employee/{id}
+```
+
+Example:
+
+```text
+DELETE /api/Employee/1
+```
+
+---
+
+# 39. Test Using Browser
+
+For GET:
+
+```text
+http://localhost/api/Employee
+```
+
+If everything is working, you should receive JSON.
+
+For example:
+
+```json
+[
+    {
+        "employeeId": 1,
+        "employeeName": "John"
+    },
+    {
+        "employeeId": 2,
+        "employeeName": "Smith"
+    }
+]
+```
+
+---
+
+# 40. Test Using Swagger
+
+If Swagger is enabled in your application, access:
+
+```text
+http://localhost/swagger
+```
+
+or:
+
+```text
+http://localhost:8080/swagger
+```
+
+depending on the IIS binding.
+
+Swagger allows you to test:
+
+```text
+GET
+POST
+PUT
+DELETE
+```
+
+without manually constructing requests.
+
+---
+
+# 41. Test Using Postman
+
+For example:
+
+### GET
+
+```text
+GET http://localhost/api/Employee
+```
+
+### GET by ID
+
+```text
+GET http://localhost/api/Employee/1
+```
+
+### POST
+
+```text
+POST http://localhost/api/Employee
+```
+
+Set:
+
+```text
+Body
+    ↓
+raw
+    ↓
+JSON
+```
+
+Then provide the employee JSON.
+
+---
+
+# 42. Common HTTP 500 Error We Encountered
+
+Your original error was:
+
+```text
+HTTP ERROR 500
+```
+
+The browser only showed:
+
+```text
+localhost is currently unable to handle this request.
+```
+
+That message alone is not enough to identify the problem.
+
+We checked the application logs and Event Viewer.
+
+The actual error was:
+
+```text
+Microsoft.Data.SqlClient.SqlException
+```
+
+with:
+
+```text
+Error Number: 229
+```
+
+and:
+
+```text
+The EXECUTE permission was denied on the object
+'sp_GetEmployee'
+```
+
+This is a SQL Server permission issue.
+
+---
+
+# 43. How to Diagnose IIS HTTP 500
+
+When an IIS API gives:
+
+```text
+HTTP 500
+```
+
+do not immediately change IIS settings randomly.
+
+Follow this sequence:
+
+```text
+Browser
+   ↓
+IIS
+   ↓
+ASP.NET Core
+   ↓
+Service
+   ↓
+Dapper
+   ↓
+SQL Server
+```
+
+Find the exact layer where the error occurs.
+
+---
+
+# 44. Check Application Logs
+
+Your application was writing logs showing:
+
+```text
+Hosting environment: Production
+Content root path: D:\IIS-Publish
+```
+
+Then:
+
+```text
+Microsoft.Data.SqlClient.SqlException
+```
+
+This tells us:
+
+### IIS is working
+
+because the application started.
+
+### ASP.NET Core is working
+
+because the request reached the controller.
+
+### Dapper is working
+
+because Dapper attempted to execute SQL.
+
+### SQL connection is working
+
+because SQL Server returned a permission error.
+
+### SQL permissions were the problem
+
+because:
+
+```text
+EXECUTE permission was denied
+```
+
+This is an important diagnostic principle for future deployments.
+
+---
+
+# 45. Check Event Viewer
+
+Open:
+
+```text
+Event Viewer
+```
+
+Go to:
+
+```text
+Windows Logs
+    ↓
+Application
+```
+
+Look for errors related to:
+
+```text
+Microsoft.AspNetCore.Server.IIS.Core.IISHttpServer
+```
+
+In your case, Event Viewer confirmed:
+
+```text
+RequestPath: /api/Employee
+```
+
+and:
+
+```text
+The EXECUTE permission was denied on the object
+'sp_GetEmployee'
+```
+
+Therefore Event Viewer confirmed the same SQL permission problem.
+
+---
+
+# 46. Check IIS Site Status
+
+In IIS Manager:
+
+```text
+Sites
+```
+
+Make sure:
+
+```text
+Dapper_CRUD
+```
+
+is:
+
+```text
+Started
+```
+
+If stopped:
+
+```text
+Right-click → Start
+```
+
+---
+
+# 47. Check Application Pool Status
+
+Go to:
+
+```text
+Application Pools
+```
+
+Verify:
+
+```text
+Dapper_CRUD
+```
+
+is:
+
+```text
+Started
+```
+
+If it repeatedly stops, check:
+
+```text
+Event Viewer
+```
+
+because repeated Application Pool crashes usually indicate a configuration/runtime/application problem.
+
+---
+
+# 48. Check Physical Path
+
+IIS should point to the **published folder**:
+
+```text
+D:\IIS-Publish
+```
+
+not the source project folder.
+
+Verify:
+
+```text
+IIS
+→ Sites
+→ Dapper_CRUD
+→ Basic Settings
+```
+
+Physical Path:
+
+```text
+D:\IIS-Publish
+```
+
+---
+
+# 49. Check `web.config`
+
+The published folder should contain:
+
+```text
+web.config
+```
+
+This is normally generated automatically by `dotnet publish`.
+
+It allows IIS to use the ASP.NET Core Module to launch the application.
+
+Do not manually create a random `web.config` unless you understand the required configuration.
+
+---
+
+# 50. Check Connection String
+
+Verify:
+
+```json
+"ConnectionStrings": {
+    "DbConn": "Server=localhost\\SQLEXPRESS;Database=Dapper;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+```
+
+Make sure:
+
+```text
+Server
+Database
+Authentication
+```
+
+are correct.
+
+One previous error we encountered was:
+
+```text
+The ConnectionString property has not been initialized.
+```
+
+That is a **different problem** from the current SQL permission error.
+
+It usually indicates that the application did not correctly retrieve the configured connection string.
+
+---
+
+# 51. Important Deployment Rule
+
+After changing:
+
+```text
+appsettings.json
+Program.cs
+Controllers
+Services
+Models
+```
+
+you need to publish the updated application again.
+
+For example:
+
+```powershell
+dotnet publish -c Release -o D:\IIS-Publish
+```
+
+Then recycle the Application Pool.
+
+Do not change the source code and assume IIS automatically gets the changes.
+
+---
+
+# 52. Recommended Update/Deployment Process
+
+For future releases:
+
+```text
+1. Get latest source code
+        ↓
+2. Build
+        ↓
+3. Test
+        ↓
+4. Publish
+        ↓
+5. Backup existing IIS application
+        ↓
+6. Copy new published files
+        ↓
+7. Verify configuration
+        ↓
+8. Recycle Application Pool
+        ↓
+9. Test API
+```
+
+If using Git:
+
+```powershell
+git pull
+```
+
+Then:
+
+```powershell
+dotnet restore
+```
+
+Then:
+
+```powershell
+dotnet build
+```
+
+Then:
+
+```powershell
+dotnet publish -c Release -o D:\IIS-Publish
+```
+
+---
+
+# 53. Recommended Production Backup
+
+Before replacing an existing deployment:
+
+```text
+D:\IIS-Publish
+```
+
+take a backup.
+
+For example:
+
+```text
+D:\IIS-Backup\2026-08-23\
+```
+
+Then copy the existing application:
+
+```text
+D:\IIS-Publish
+        ↓
+D:\IIS-Backup\2026-08-23
+```
+
+This allows rollback if the new deployment fails.
+
+---
+
+# 54. Recommended Production Folder Structure
+
+A cleaner company setup could be:
+
+```text
+D:\
+│
+├── Applications
+│   └── Dapper_CRUD
+│       └── Current
+│
+├── Backups
+│   └── Dapper_CRUD
+│       ├── 2026-08-20
+│       └── 2026-08-23
+│
+└── Logs
+    └── Dapper_CRUD
+```
+
+Your current setup:
+
+```text
+D:\IIS-Publish
+```
+
+is perfectly fine for learning/small internal deployment.
+
+For a larger production environment, versioned deployment folders are better because rollback becomes straightforward.
+
+---
+
+# 55. Complete Command Summary
+
+For documentation, this is the condensed command sequence.
+
+### Check Git
+
+```powershell
+git --version
+```
+
+### Clone repository
+
+```powershell
+cd D:\Projects
+git clone <REPOSITORY-URL>
+```
+
+### Enter project
+
+```powershell
+cd D:\Projects\Dapper-API-React\Dapper_CRUD
+```
+
+### Check .NET
+
+```powershell
+dotnet --version
+dotnet --list-sdks
+dotnet --list-runtimes
+```
+
+### Restore
+
+```powershell
+dotnet restore
+```
+
+### Build
+
+```powershell
+dotnet build
+```
+
+### Create deployment folder
+
+```powershell
+mkdir D:\IIS-Publish
+```
+
+### Publish
+
+```powershell
+dotnet publish -c Release -o D:\IIS-Publish
+```
+
+### Restart IIS
+
+Run Command Prompt/PowerShell **as Administrator**:
+
+```cmd
+iisreset
+```
+
+---
+
+# 56. Complete Deployment Architecture
+
+The final architecture looks like this:
+
+```text
+                    USER / FRONTEND
+                           │
+                           │ HTTP Request
+                           ▼
+                    ┌──────────────┐
+                    │     IIS      │
+                    │              │
+                    │ Dapper_CRUD  │
+                    └──────┬───────┘
+                           │
+                           ▼
+                  Application Pool
+                    Dapper_CRUD
+                           │
+                           │
+              IIS APPPOOL\Dapper_CRUD
+                           │
+                           ▼
+                  ASP.NET Core 8
+                           │
+                           ▼
+                    Controller
+                 EmployeeController
+                           │
+                           ▼
+                      Service
+                    EmpService
+                           │
+                           ▼
+                       Dapper
+                           │
+                           ▼
+                    SQL Server
+                  localhost\SQLEXPRESS
+                           │
+                           ▼
+                       Dapper DB
+                           │
+                           ▼
+                 Stored Procedures
+```
+
+---
+
+# 57. Final Deployment Checklist
+
+Before declaring the deployment successful, verify each item:
+
+### Application
+
+* [ ] Source code downloaded/cloned
+* [ ] Correct `.NET` version identified
+* [ ] `dotnet restore` successful
+* [ ] `dotnet build` successful
+* [ ] `dotnet publish` successful
+* [ ] Published files exist in `D:\IIS-Publish`
+
+### .NET/IIS
+
+* [ ] .NET runtime installed
+* [ ] ASP.NET Core Hosting Bundle installed
+* [ ] IIS installed
+* [ ] IIS site created
+* [ ] Application Pool created
+* [ ] Application Pool uses `No Managed Code`
+* [ ] Application Pool uses `ApplicationPoolIdentity`
+* [ ] Application Pool is started
+* [ ] IIS physical path points to `D:\IIS-Publish`
+* [ ] `web.config` exists
+
+### File Permissions
+
+* [ ] `IIS APPPOOL\Dapper_CRUD` can read/execute the published folder
+
+### SQL Server
+
+* [ ] SQL Server is running
+* [ ] `Dapper` database exists
+* [ ] Required tables exist
+* [ ] Required stored procedures exist
+* [ ] SQL Server login exists:
+
+  ```text
+  IIS APPPOOL\Dapper_CRUD
+  ```
+* [ ] Database user exists:
+
+  ```text
+  IIS APPPOOL\Dapper_CRUD
+  ```
+* [ ] Required `EXECUTE` permissions are granted
+
+### Testing
+
+* [ ] GET all employees works
+* [ ] GET employee by ID works
+* [ ] POST works
+* [ ] PUT works
+* [ ] DELETE works
+* [ ] Swagger works, if enabled
+* [ ] No HTTP 500
+* [ ] Event Viewer has no relevant application errors
+
+---
+
+## The key lesson from our deployment issue
+
+The most important part of the troubleshooting we did is this:
+
+```text
+HTTP 500
+   ↓
+Check IIS/Application logs
+   ↓
+SQL Exception 229
+   ↓
+EXECUTE permission denied
+   ↓
+Check IIS identity
+   ↓
+IIS APPPOOL\Dapper_CRUD
+   ↓
+Create SQL Login
+   ↓
+Create/verify Dapper database user
+   ↓
+Grant EXECUTE permission
+   ↓
+Recycle Application Pool
+   ↓
+Test API
+```
+
+So **IIS itself was not fundamentally broken** in your case. The application was successfully starting and reaching SQL Server. The failure was that the IIS Application Pool identity did not have permission to execute the stored procedures.
+
+For a company SOP, I would keep this document as the **standard deployment procedure**, and add a separate **"IIS Deployment Troubleshooting Guide"** containing the common `500`, `403`, `404`, `405`, connection-string, runtime, permissions, and SQL authentication errors.
